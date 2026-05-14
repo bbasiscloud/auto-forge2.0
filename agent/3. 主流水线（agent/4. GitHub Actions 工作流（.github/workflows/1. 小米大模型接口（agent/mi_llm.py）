@@ -1,0 +1,20 @@
+import os
+import aiohttp
+import asyncio
+
+API_KEY = os.environ["XIAOMI_API_KEY"]
+BASE = os.environ.get("XIAOMI_API_BASE", "https://api.mi.com/v1")
+MODEL = "mi-1.5-32k"
+
+async def chat(messages: list, temperature=0.3, max_tokens=4096) -> str:
+    async with aiohttp.ClientSession() as s:
+        async with s.post(
+            f"{BASE}/chat/completions",
+            json={"model": MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+            headers={"Authorization": f"Bearer {API_KEY}"}
+        ) as r:
+            data = await r.json()
+            return data["choices"][0]["message"]["content"]
+
+async def batch_chat(prompts: list[list]) -> list[str]:
+    return await asyncio.gather(*[chat(p) for p in prompts])
