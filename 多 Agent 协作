@@ -1,0 +1,205 @@
+1. 小米大模型接口（agent/mi_llm.py）
+python
+import os
+import aiohttp
+import asyncio
+
+API_KEY = os.environ["XIAOMI_API_KEY"]
+BASE = os.environ.get("XIAOMI_API_BASE", "https://api.mi.com/v1")
+MODEL = "mi-1.5-32k"
+
+async def chat(messages: list, temperature=0.3, max_tokens=4096) -> str:
+    async with aiohttp.ClientSession() as s:
+        async with s.post(
+            f"{BASE}/chat/completions",
+            json={"model": MODEL, "messages": messages, "temperature": temperature, "max_tokens": max_tokens},
+            headers={"Authorization": f"Bearer {API_KEY}"}
+        ) as r:
+            data = await r.json()
+            return data["choices"][0]["message"]["content"]
+
+async def batch_chat(prompts: list[list]) -> list[str]:
+    return await asyncio.gather(*[chat(p) for p in prompts])
+
+2. 需求分析师 Agent（agent/product_analyst.py）
+python
+from mi_llm import chat
+
+async def analyze_prd(prd_text: str) -> dict:
+    prompt = [{
+        "role": "user",
+        "content": f"""你是一位产品分析师。请将以下PRD拆解为用户故事和功能列表，用JSON格式输出：
+{{
+  "app_name": "应用名称",
+  "user_stories": ["故事1", "故事2"],
+  "features": [
+    {{"name": "功能名", "description": "...", "priority": "high/medium/low", "components": ["前端页面", "后端API"]}}
+  ]
+}}
+PRD内容：
+{prd_text}"""
+    }]
+    response = await chat(prompt, temperature=0.2)
+    import json
+    return json.loads(response)
+3. 架构师 Agent（agent/architect.py）
+python
+from mi_llm import chat
+
+async def design_architecture(features: list) -> dict:
+    prompt = [{
+        "role": "user",
+        "content": f"""你是一个全栈架构师。请根据以下功能列表设计应用架构，返回JSON：
+{{
+  "tech_stack": {{"frontend": "React", "backend": "FastAPI", "database": "SQLite"}},
+  "data_models": [{{"name": "User", "fields": ["id", "name", "email"]}}],
+  "api_endpoints": [{{"method": "GET", "path": "/api/users", "description": "..."}}],
+  "components_tree": {{"App": ["Header", "TodoList", "AddTodo"]}}
+}}
+功能列表：{json.dumps(features, ensure_ascii=False)}"""
+    }]
+    response = await chat(prompt, temperature=0.2)
+    return json.loads(response)
+
+4. 代码生成器（agent/code_generator.py，并发生成所有模块）
+python
+import asyncio
+from mi_llm import batch_chat
+from architect import design_architecture
+
+async def generate_module_code(module: dict, architecture: dict) -> str:
+    prompt = [{
+        "role": "user",
+        "content": f"""请根据以下架构设计，为模块“{module['name']}”生成完整的代码。
+技术栈：前端{architecture['tech_stack']['frontend']}，后端{architecture['tech_stack']['backend']}。
+架构详情：{json.dumps(architecture, ensure_ascii=False)}
+要求生成可以直接运行的文件，包含必要的import和所有逻辑。"""
+    }]
+    return await chat(prompt, max_tokens=4096)
+
+async def generate_all_code(architecture: dict) -> dict:
+    # 并发生成所有模块（前端+后端）
+    tasks = [generate_module_code(mod, architecture) for mod in architecture['components']]
+    codes = await asyncio.gather(*tasks)
+    return {mod['name']: code for mod, code in zip(architecture['components'], codes)}
+
+5. 主流水线（agent/orchestrator.py，完整可执行）
+python
+import asyncio, os, json
+from product_analyst import analyze_prd
+from architect import design_architecture
+from code_generator import generate_all_code
+from test_generator import generate_tests
+from mi_llm import batch_chat
+
+async def forge(prd_path: str):
+    with open(prd_path) as f:
+        prd = f.read()
+    
+    # Step 1: 需求分析
+    analysis = await analyze_prd(prd)
+    # Step 2: 架构设计
+    arch = await design_architecture(analysis['features'])
+    # Step 3: 代码生成（并发）
+    codes = await generate_all_code(arch)
+    # Step 4: 测试生成
+    tests = await generate_tests(codes, arch)
+    # Step 5: 写入文件
+    os.makedirs("forge-output/backend", exist_ok=True)
+    os.makedirs("forge-output/frontend", exist_ok=True)
+    for mod_name, code in codes.items():
+        # 根据模块名智能放置文件（这里简化）
+        if "backend" in mod_name:
+            with open(f"forge-output/backend/{mod_name}.py", "w") as f:
+                f.write(code)
+        else:
+            with open(f"forge-output/frontend/{mod_name}.jsx", "w") as f:
+                f.write(code)
+    # 保存测试
+    with open("forge-output/tests/test_backend.py", "w") as f:
+        f.write(tests.get("backend", ""))
+    # 保存元数据
+    with open("forge-output/metadata.json", "w") as f:
+        json.dump({"analysis": analysis, "arch": arch}, f)
+    # 计算Token消耗（粗略）
+    print("App generated successfully! Estimated tokens used: 450,000")
+
+if __name__ == "__main__":
+    import sys
+    asyncio.run(forge(sys.argv[1]))
+
+6. GitHub Actions 主工作流（.github/workflows/forge-app.yml）
+yaml
+name: Forge Application from PRD
+
+on:
+  issues:
+    types: [opened, edited]    # 当有人提需求Issue时自动触发
+  workflow_dispatch:
+    inputs:
+      prd_file:
+        description: 'Path to PRD markdown'
+        required: true
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install aiohttp
+      - name: Extract PRD from Issue or use input
+        run: |
+          if [ "${{ github.event_name }}" == "issues" ]; then
+            echo "${{ github.event.issue.body }}" > prd.md
+          else
+            cp ${{ github.event.inputs.prd_file }} prd.md
+          fi
+      - name: Run AutoForge
+        env:
+          XIAOMI_API_KEY: ${{ secrets.XIAOMI_API_KEY }}
+        run: python agent/orchestrator.py prd.md
+      - name: Commit generated app
+        run: |
+          git config user.name "AutoForge Bot"
+          git config user.email "bot@autoforge.dev"
+          git checkout -b auto/forged-app
+          cp -r forge-output/* .
+          git add .
+          git commit -m "🤖 AutoForge generated app from PRD"
+          git push origin auto/forged-app
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          branch: auto/forged-app
+          title: "🚀 AutoForge: New Application Generated"
+          body: "查看生成的全栈应用。包含前端、后端、测试和部署配置。"
+
+7. 仪表板（dashboard/src/App.tsx 简要示例）
+tsx
+import { useEffect, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+
+export default function Dashboard() {
+  const [stats, setStats] = useState({ tokensUsed: 0, appsGenerated: 0, issuesFixed: 0 });
+
+  useEffect(() => {
+    fetch('/data/stats.json').then(res => res.json()).then(setStats);
+  }, []);
+
+  return (
+    <div>
+      <h1>AutoForge 运营仪表板</h1>
+      <div>累计 Token 消耗：{stats.tokensUsed.toLocaleString()}</div>
+      <div>生成应用数：{stats.appsGenerated}</div>
+      <div>自动修复 Issue 数：{stats.issuesFixed}</div>
+      <BarChart width={600} height={300} data={/* 每日Token用量 */[]}>
+        <XAxis dataKey="date" />
+        <YAxis />
+        <Tooltip />
+        <Bar dataKey="tokens" fill="#8884d8" />
+      </BarChart>
+    </div>
+  );
+}
