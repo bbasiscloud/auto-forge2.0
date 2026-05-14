@@ -1,0 +1,19 @@
+from mi_llm import chat
+
+async def analyze_prd(prd_text: str) -> dict:
+    prompt = [{
+        "role": "user",
+        "content": f"""你是一位产品分析师。请将以下PRD拆解为用户故事和功能列表，用JSON格式输出：
+{{
+  "app_name": "应用名称",
+  "user_stories": ["故事1", "故事2"],
+  "features": [
+    {{"name": "功能名", "description": "...", "priority": "high/medium/low", "components": ["前端页面", "后端API"]}}
+  ]
+}}
+PRD内容：
+{prd_text}"""
+    }]
+    response = await chat(prompt, temperature=0.2)
+    import json
+    return json.loads(response)
