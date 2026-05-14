@@ -1,0 +1,16 @@
+from mi_llm import chat
+
+async def design_architecture(features: list) -> dict:
+    prompt = [{
+        "role": "user",
+        "content": f"""你是一个全栈架构师。请根据以下功能列表设计应用架构，返回JSON：
+{{
+  "tech_stack": {{"frontend": "React", "backend": "FastAPI", "database": "SQLite"}},
+  "data_models": [{{"name": "User", "fields": ["id", "name", "email"]}}],
+  "api_endpoints": [{{"method": "GET", "path": "/api/users", "description": "..."}}],
+  "components_tree": {{"App": ["Header", "TodoList", "AddTodo"]}}
+}}
+功能列表：{json.dumps(features, ensure_ascii=False)}"""
+    }]
+    response = await chat(prompt, temperature=0.2)
+    return json.loads(response)
