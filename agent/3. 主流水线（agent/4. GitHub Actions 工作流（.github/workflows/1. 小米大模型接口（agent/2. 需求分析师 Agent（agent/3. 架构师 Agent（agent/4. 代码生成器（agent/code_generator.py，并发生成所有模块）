@@ -1,0 +1,19 @@
+import asyncio
+from mi_llm import batch_chat
+from architect import design_architecture
+
+async def generate_module_code(module: dict, architecture: dict) -> str:
+    prompt = [{
+        "role": "user",
+        "content": f"""请根据以下架构设计，为模块“{module['name']}”生成完整的代码。
+技术栈：前端{architecture['tech_stack']['frontend']}，后端{architecture['tech_stack']['backend']}。
+架构详情：{json.dumps(architecture, ensure_ascii=False)}
+要求生成可以直接运行的文件，包含必要的import和所有逻辑。"""
+    }]
+    return await chat(prompt, max_tokens=4096)
+
+async def generate_all_code(architecture: dict) -> dict:
+    # 并发生成所有模块（前端+后端）
+    tasks = [generate_module_code(mod, architecture) for mod in architecture['components']]
+    codes = await asyncio.gather(*tasks)
+    return {mod['name']: code for mod, code in zip(architecture['components'], codes)}
