@@ -1,0 +1,17 @@
+import os, asyncio, aiohttp
+from typing import List
+
+API_KEY = os.environ["XIAOMI_API_KEY"]
+BASE = os.environ.get("XIAOMI_API_BASE", "https://api.mi.com/v1")
+MODEL = "mi-1.5-32k"
+
+async def complete(messages: List[dict], max_tokens=2048) -> str:
+    async with aiohttp.ClientSession() as s:
+        async with s.post(f"{BASE}/chat/completions",
+            json={"model": MODEL, "messages": messages, "max_tokens": max_tokens},
+            headers={"Authorization": f"Bearer {API_KEY}"}) as r:
+            data = await r.json()
+            return data["choices"][0]["message"]["content"]
+
+async def batch_complete(prompts: List[List[dict]]) -> List[str]:
+    return await asyncio.gather(*[complete(p) for p in prompts])
