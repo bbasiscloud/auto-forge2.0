@@ -1,0 +1,32 @@
+AutoForge 整体架构
+text
+[GitHub Repository: auto-forge]
+│
+├── .github/workflows/
+│   ├── forge-app.yml           # 主流水线：根据需求生成完整应用并部署
+│   ├── auto-fix.yml            # 自动处理Issue：分析→生成修复代码→PR
+│   └── docs-dashboard.yml      # 仪表板更新（展示统计）
+│
+├── agent/                       # Python 多 Agent 协作引擎
+│   ├── mi_llm.py                # 小米大模型统一接口（长上下文、并发）
+│   ├── product_analyst.py       # 需求拆解 → 生成用户故事和功能列表
+│   ├── architect.py             # 根据功能列表设计前后端模块、数据模型
+│   ├── code_generator.py        # 按模块生成完整代码（后端+前端）
+│   ├── test_generator.py        # 为每个模块生成 pytest / Cypress 测试
+│   ├── code_reviewer.py         # 自我审查生成代码的质量和一致性
+│   └── orchestrator.py          # 调度以上Agent，管理生成状态和版本
+│
+├── templates/                   # 生成代码的基础模板（React + FastAPI等）
+│   ├── backend/
+│   └── frontend/
+│
+├── forge-output/                # 生成的应用源码（被 .gitignore，运行时产出）
+│
+├── dashboard/                   # React 仪表板（展示 Token 消耗、应用列表、Issue 修复记录）
+│   └── src/ ...
+│
+├── examples/                    # 示例需求文档（用户可直接体验）
+│   └── todo-app-prd.md
+│
+├── config.yaml                  # 配置：小米API Key、默认技术栈、部署目标
+└── README.md
