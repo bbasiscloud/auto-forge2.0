@@ -1,0 +1,25 @@
+import asyncio, json, os, glob
+from doc_generator import generate_doc_for_file
+
+async def main():
+    # 收集所有代码文件
+    code_files = glob.glob("**/*.py", recursive=True)  # 可扩展更多后缀
+    docs = {}
+    for fp in code_files:
+        with open(fp) as f:
+            code = f.read()
+        docs[fp] = await generate_doc_for_file(fp, code)
+    
+    # 写入 Markdown 文档到 docs/ 目录，供前端站点使用
+    os.makedirs("docs", exist_ok=True)
+    for fp, doc in docs.items():
+        md_path = f"docs/{fp.replace('/', '_')}.md"
+        with open(md_path, "w") as f:
+            f.write(f"# {fp}\n\n## 摘要\n{doc['summary']}\n\n## API 文档\n{doc['api_doc']}\n\n## 示例\n{doc['examples']}")
+    
+    # 保存 Token 用量日志
+    with open("data/usage.json", "w") as f:
+        json.dump({"last_run": "2026-05-14", "files_processed": len(code_files), "estimated_tokens": len(code_files)*3*2500}, f)
+
+if __name__ == "__main__":
+    asyncio.run(main())
