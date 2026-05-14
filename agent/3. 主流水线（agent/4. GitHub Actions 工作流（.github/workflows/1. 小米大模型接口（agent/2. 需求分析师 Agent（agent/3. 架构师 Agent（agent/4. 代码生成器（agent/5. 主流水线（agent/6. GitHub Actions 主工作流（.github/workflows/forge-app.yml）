@@ -1,0 +1,45 @@
+name: Forge Application from PRD
+
+on:
+  issues:
+    types: [opened, edited]    # 当有人提需求Issue时自动触发
+  workflow_dispatch:
+    inputs:
+      prd_file:
+        description: 'Path to PRD markdown'
+        required: true
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install aiohttp
+      - name: Extract PRD from Issue or use input
+        run: |
+          if [ "${{ github.event_name }}" == "issues" ]; then
+            echo "${{ github.event.issue.body }}" > prd.md
+          else
+            cp ${{ github.event.inputs.prd_file }} prd.md
+          fi
+      - name: Run AutoForge
+        env:
+          XIAOMI_API_KEY: ${{ secrets.XIAOMI_API_KEY }}
+        run: python agent/orchestrator.py prd.md
+      - name: Commit generated app
+        run: |
+          git config user.name "AutoForge Bot"
+          git config user.email "bot@autoforge.dev"
+          git checkout -b auto/forged-app
+          cp -r forge-output/* .
+          git add .
+          git commit -m "🤖 AutoForge generated app from PRD"
+          git push origin auto/forged-app
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          branch: auto/forged-app
+          title: "🚀 AutoForge: New Application Generated"
+          body: "查看生成的全栈应用。包含前端、后端、测试和部署配置。"
