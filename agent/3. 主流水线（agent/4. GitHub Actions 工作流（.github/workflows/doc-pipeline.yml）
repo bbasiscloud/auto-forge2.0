@@ -1,0 +1,28 @@
+name: Build & Deploy Knowledge Hub
+
+on:
+  schedule: [{cron: '0 3 * * *'}]   # 每天凌晨3点全量重建
+  push:                              # 代码推送增量更新
+  workflow_dispatch:
+
+jobs:
+  doc-builder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install aiohttp
+      - name: Run Doc Agent
+        env:
+          XIAOMI_API_KEY: ${{ secrets.XIAOMI_API_KEY }}
+        run: python agent/orchestrator.py
+      - name: Build Frontend
+        run: |
+          cd frontend && npm ci && npm run build
+          cp -r ../docs build/docs-data
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/build
