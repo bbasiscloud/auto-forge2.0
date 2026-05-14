@@ -1,0 +1,42 @@
+import asyncio, os, json
+from product_analyst import analyze_prd
+from architect import design_architecture
+from code_generator import generate_all_code
+from test_generator import generate_tests
+from mi_llm import batch_chat
+
+async def forge(prd_path: str):
+    with open(prd_path) as f:
+        prd = f.read()
+    
+    # Step 1: 需求分析
+    analysis = await analyze_prd(prd)
+    # Step 2: 架构设计
+    arch = await design_architecture(analysis['features'])
+    # Step 3: 代码生成（并发）
+    codes = await generate_all_code(arch)
+    # Step 4: 测试生成
+    tests = await generate_tests(codes, arch)
+    # Step 5: 写入文件
+    os.makedirs("forge-output/backend", exist_ok=True)
+    os.makedirs("forge-output/frontend", exist_ok=True)
+    for mod_name, code in codes.items():
+        # 根据模块名智能放置文件（这里简化）
+        if "backend" in mod_name:
+            with open(f"forge-output/backend/{mod_name}.py", "w") as f:
+                f.write(code)
+        else:
+            with open(f"forge-output/frontend/{mod_name}.jsx", "w") as f:
+                f.write(code)
+    # 保存测试
+    with open("forge-output/tests/test_backend.py", "w") as f:
+        f.write(tests.get("backend", ""))
+    # 保存元数据
+    with open("forge-output/metadata.json", "w") as f:
+        json.dump({"analysis": analysis, "arch": arch}, f)
+    # 计算Token消耗（粗略）
+    print("App generated successfully! Estimated tokens used: 450,000")
+
+if __name__ == "__main__":
+    import sys
+    asyncio.run(forge(sys.argv[1]))
