@@ -1,0 +1,10 @@
+from mi_llm import batch_complete
+
+async def generate_doc_for_file(file_path: str, code: str) -> dict:
+    prompts = [
+        [{"role": "user", "content": f"为以下代码写一个 200 字的功能摘要。\n{code}"}],
+        [{"role": "user", "content": f"根据代码生成详细的 API 文档，包括所有公开函数、参数、返回值。\n{code}"}],
+        [{"role": "user", "content": f"为上述 API 生成 3 个典型使用示例。\n{code}"}],
+    ]
+    summary, api_doc, examples = await batch_complete(prompts)
+    return {"summary": summary, "api_doc": api_doc, "examples": examples}
